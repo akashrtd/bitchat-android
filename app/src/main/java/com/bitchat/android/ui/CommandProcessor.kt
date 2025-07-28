@@ -7,24 +7,12 @@ import java.util.*
  * Handles processing of IRC-style commands
  */
 class CommandProcessor(
+    private val viewModel: ChatViewModel,
     private val state: ChatState,
     private val messageManager: MessageManager,
     private val channelManager: ChannelManager,
     private val privateChatManager: PrivateChatManager
-) {
-    
-    // Available commands list
-    private val baseCommands = listOf(
-        CommandSuggestion("/block", emptyList(), "[nickname]", "block or list blocked peers"),
-        CommandSuggestion("/channels", emptyList(), null, "show all discovered channels"),
-        CommandSuggestion("/clear", emptyList(), null, "clear chat messages"),
-        CommandSuggestion("/hug", emptyList(), "<nickname>", "send someone a warm hug"),
-        CommandSuggestion("/j", listOf("/join"), "<channel>", "join or create a channel"),
-        CommandSuggestion("/m", listOf("/msg"), "<nickname> [message]", "send private message"),
-        CommandSuggestion("/slap", emptyList(), "<nickname>", "slap someone with a trout"),
-        CommandSuggestion("/unblock", emptyList(), "<nickname>", "unblock a peer"),
-        CommandSuggestion("/w", emptyList(), null, "see who's online")
-    )
+)
     
     // MARK: - Command Processing
     
@@ -45,6 +33,8 @@ class CommandProcessor(
             "/hug" -> handleActionCommand(parts, "gives", "a warm hug 🫂", meshService, myPeerID, onSendMessage)
             "/slap" -> handleActionCommand(parts, "slaps", "around a bit with a large trout 🐟", meshService, myPeerID, onSendMessage)
             "/channels" -> handleChannelsCommand()
+            "/connect" -> handleConnectCommand(parts, meshService)
+            "/disconnect" -> handleDisconnectCommand(meshService)
             else -> handleUnknownCommand(cmd)
         }
         
@@ -314,6 +304,48 @@ class CommandProcessor(
             isRelay = false
         )
         messageManager.addMessage(systemMessage)
+    }
+
+    private fun handleConnectCommand(parts: List<String>, meshService: Any) {
+        if (parts.size > 2) {
+            val nickname = parts[1]
+            val ipAddress = parts[2]
+            val peerID = getPeerIDForNickname(nickname, meshService)
+            if (peerID != null) {
+                viewModel.addPeerAddress(peerID, ipAddress)
+                try {
+                    val method = meshService::class.java.getDeclaredMethod("connectToPeerViaNetwork", String::class.java)
+                    method.invoke(meshService, ipAddress)
+                } catch (e: Exception) {
+                    // Handle error
+                }
+            } else {
+                val systemMessage = BitchatMessage(
+                    sender = "system",
+                    content = "user '$nickname' not found.",
+                    timestamp = Date(),
+                    isRelay = false
+                )
+                messageManager.addMessage(systemMessage)
+            }
+        } else {
+            val systemMessage = BitchatMessage(
+                sender = "system",
+                content = "usage: /connect <nickname> <ip_address>",
+                timestamp = Date(),
+                isRelay = false
+            )
+            messageManager.addMessage(systemMessage)
+        }
+    }
+
+    private fun handleDisconnectCommand(meshService: Any) {
+        try {
+            val method = meshService::class.java.getDeclaredMethod("disconnectFromNetwork")
+            method.invoke(meshService)
+        } catch (e: Exception) {
+            // Handle error
+        }
     }
     
     private fun handleUnknownCommand(cmd: String) {

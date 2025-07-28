@@ -43,7 +43,7 @@ class ChatViewModel(
     }
     
     val privateChatManager = PrivateChatManager(state, messageManager, dataManager, noiseSessionDelegate)
-    private val commandProcessor = CommandProcessor(state, messageManager, channelManager, privateChatManager)
+    private val commandProcessor = CommandProcessor(this, state, messageManager, channelManager, privateChatManager)
     private val notificationManager = NotificationManager(application.applicationContext)
     
     // Delegate handler for mesh callbacks
@@ -212,14 +212,24 @@ class ChatViewModel(
         if (selectedPeer != null) {
             // Send private message
             val recipientNickname = meshService.getPeerNicknames()[selectedPeer]
-            privateChatManager.sendPrivateMessage(
-                content, 
-                selectedPeer, 
-                recipientNickname,
-                state.getNicknameValue(),
-                meshService.myPeerID
-            ) { messageContent, peerID, recipientNicknameParam, messageId ->
-                meshService.sendPrivateMessage(messageContent, peerID, recipientNicknameParam, messageId)
+            if (meshService.isPeerConnected(selectedPeer)) {
+                privateChatManager.sendPrivateMessage(
+                    content,
+                    selectedPeer,
+                    recipientNickname,
+                    state.getNicknameValue(),
+                    meshService.myPeerID
+                ) { messageContent, peerID, recipientNicknameParam, messageId ->
+                    meshService.sendPrivateMessage(messageContent, peerID, recipientNicknameParam, messageId)
+                }
+            } else {
+                // Peer not connected via Bluetooth, try sending via network
+                val peerAddress = state.getPeerAddressesValue()[selectedPeer]
+                if (peerAddress != null) {
+                    meshService.sendPrivateMessageViaNetwork(content, peerAddress)
+                } else {
+                    // Handle case where peer address is not known
+                }
             }
         } else {
             // Send public/channel message
@@ -266,6 +276,12 @@ class ChatViewModel(
     
     fun getPeerIDForNickname(nickname: String): String? {
         return meshService.getPeerNicknames().entries.find { it.value == nickname }?.key
+    }
+
+    fun addPeerAddress(peerID: String, address: String) {
+        val currentAddresses = state.getPeerAddressesValue().toMutableMap()
+        currentAddresses[peerID] = address
+        state.setPeerAddresses(currentAddresses)
     }
     
     fun toggleFavorite(peerID: String) {

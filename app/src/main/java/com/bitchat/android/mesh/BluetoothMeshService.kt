@@ -10,6 +10,7 @@ import com.bitchat.android.model.RoutedPacket
 import com.bitchat.android.model.DeliveryAck
 import com.bitchat.android.model.ReadReceipt
 import com.bitchat.android.model.NoiseIdentityAnnouncement
+import com.bitchat.android.networking.NetworkManager
 import com.bitchat.android.protocol.BitchatPacket
 import com.bitchat.android.protocol.MessageType
 import com.bitchat.android.protocol.SpecialRecipients
@@ -43,8 +44,8 @@ class BluetoothMeshService(private val context: Context) {
     val myPeerID: String = generateCompatiblePeerID()
     
     // Core components - each handling specific responsibilities
-    private val encryptionService = EncryptionService(context)
-    private val peerManager = PeerManager()
+     private val networkManager = NetworkManager(context)
+     private val encryptionService = EncryptionService(context)    private val peerManager = PeerManager()
     private val fragmentManager = FragmentManager()
     private val securityManager = SecurityManager(encryptionService, myPeerID)
     private val storeForwardManager = StoreForwardManager()
@@ -419,7 +420,8 @@ class BluetoothMeshService(private val context: Context) {
         Log.i(TAG, "Starting Bluetooth mesh service with peer ID: $myPeerID")
         
         if (connectionManager.startServices()) {
-            isActive = true            
+            isActive = true
+            networkManager.startServer()
         } else {
             Log.e(TAG, "Failed to start Bluetooth services")
         }
@@ -497,6 +499,18 @@ class BluetoothMeshService(private val context: Context) {
         }
     }
     
+    fun sendPrivateMessageViaNetwork(content: String, recipientPeerAddress: String) {
+        networkManager.sendMessage(recipientPeerAddress, content)
+    }
+
+    fun connectToPeerViaNetwork(peerAddress: String) {
+        networkManager.connectToPeer(peerAddress)
+    }
+
+    fun disconnectFromNetwork() {
+        networkManager.disconnect()
+    }
+
     /**
      * Send private message
      */
@@ -846,6 +860,10 @@ class BluetoothMeshService(private val context: Context) {
         connectionManager.broadcastPacket(RoutedPacket(packet))
     }
     
+    fun isPeerConnected(peerID: String): Boolean {
+        return peerManager.isPeerActive(peerID)
+    }
+
     /**
      * Get peer nicknames
      */
